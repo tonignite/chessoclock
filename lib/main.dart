@@ -74,7 +74,7 @@ class _AlarmHomePageState extends State<AlarmHomePage> {
                     builder: (context) => ChessPuzzlePage(
                       puzzle: ChessPuzzle(
                         pgn: '1. e4 c5 2. Nf3 d6',
-                        solutionMoves: ['e2e4', 'c7c5', 'g1f3'],
+                        solutionMoves: ['e4', 'c5', 'Nf3'],
                         description: 'Test puzzle',
                       ),
                     ),
@@ -155,17 +155,17 @@ class _SetAlarmPageState extends State<SetAlarmPage> {
   final List<ChessPuzzle> samplePuzzles = [
     ChessPuzzle(
       pgn: '1.e4c52.Nf3d6',
-      solutionMoves: ['e2e4', 'c7c5', 'g1f3'],
+      solutionMoves: ['e4', 'c5', 'Nf3'],
       description: 'Sicilian Defense - Move e4, c5, Nf3',
     ),
     ChessPuzzle(
       pgn: '1. d4 Nf6 2. c4 g6',
-      solutionMoves: ['d2d4', 'g8f6', 'c2c4'],
+      solutionMoves: ['d4', 'Nf6', 'c4'],
       description: 'King\'s Indian Defense - Move d4, Nf6, c4',
     ),
     ChessPuzzle(
       pgn: '1. Nf3 Nf6 2. c4 g6',
-      solutionMoves: ['g1f3', 'g8f6', 'c2c4'],
+      solutionMoves: ['Nf3', 'Nf6', 'c4'],
       description: 'Reti Opening - Move Nf3, Nf6, c4',
     ),
   ];
@@ -320,14 +320,13 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
     final expectedMove = widget.puzzle.solutionMoves[currentSolutionMoveIndex];
     
     // Check if the last move matches the expected move
-    final halfMoves = game.moves().length;
-    final moveHistory = game.history;
+    final sanMoves = game.san_moves();
     
-    if (moveHistory.isNotEmpty) {
-      final lastMove = moveHistory.last;
-      final lastMoveStr = '${lastMove['from']}${lastMove['to']}';
-      
-      if (lastMoveStr == expectedMove) {
+    if (sanMoves.isNotEmpty) {
+      final lastMove = sanMoves.last;
+      print(lastMove);
+      print(expectedMove);
+      if (lastMove == expectedMove) {
         // Correct move!
         setState(() {
           lastMoveStatus = '✓ Correct move!';
