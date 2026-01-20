@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:chess/chess.dart' as chess;
+import 'package:flutter_chess_board/flutter_chess_board.dart';
 
 void main() {
   runApp(const AlarmChessPuzzleApp());
@@ -154,7 +154,7 @@ class _SetAlarmPageState extends State<SetAlarmPage> {
 
   final List<ChessPuzzle> samplePuzzles = [
     ChessPuzzle(
-      pgn: '1. e4 c5 2. Nf3 d6',
+      pgn: '1.e4c52.Nf3d6',
       solutionMoves: ['e2e4', 'c7c5', 'g1f3'],
       description: 'Sicilian Defense - Move e4, c5, Nf3',
     ),
@@ -273,15 +273,14 @@ class ChessPuzzlePage extends StatefulWidget {
 }
 
 class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
-  late chess.Chess game;
+  late ChessBoardController boardController;
   int moveCount = 0;
   String? lastMoveStatus;
 
   @override
   void initState() {
     super.initState();
-    game = chess.Chess();
-    game.load_pgn(widget.puzzle.pgn);
+    boardController = ChessBoardController();
   }
 
   @override
@@ -334,14 +333,11 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
             ],
             const SizedBox(height: 20),
             Expanded(
-              child: ChessBoardWidget(
-                game: game,
-                solutionMoves: widget.puzzle.solutionMoves,
-                onMoveResult: (status) {
-                  setState(() {
-                    lastMoveStatus = status;
-                    moveCount++;
-                  });
+              child: ChessBoard(
+                controller: boardController,
+                boardColor: BoardColor.brown,
+                onMove: () {
+                  // Handle move validation here
                 },
               ),
             ),
@@ -352,8 +348,7 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
-                      game = chess.Chess();
-                      game.load_pgn(widget.puzzle.pgn);
+                      boardController.resetBoard();
                       lastMoveStatus = null;
                       moveCount = 0;
                     });
@@ -372,176 +367,5 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
         ),
       ),
     );
-  }
-}
-
-class ChessBoardWidget extends StatefulWidget {
-  final chess.Chess game;
-  final List<String> solutionMoves;
-  final Function(String) onMoveResult;
-
-  const ChessBoardWidget({
-    super.key,
-    required this.game,
-    required this.solutionMoves,
-    required this.onMoveResult,
-  });
-
-  @override
-  State<ChessBoardWidget> createState() => _ChessBoardWidgetState();
-}
-
-class _ChessBoardWidgetState extends State<ChessBoardWidget> {
-  String? selectedSquare;
-  List<String> validMoves = [];
-  int solutionIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  String _indexToSquare(int row, int col) {
-    return String.fromCharCode('a'.codeUnitAt(0) + col) + (8 - row).toString();
-  }
-
-  List<List<chess.Piece?>> _getBoardGrid() {
-    final boardFlat = widget.game.board;
-    final boardGrid = <List<chess.Piece?>>[];
-    for (int row = 0; row < 8; row++) {
-      final rowPieces = <chess.Piece?>[];
-      for (int col = 0; col < 8; col++) {
-        final index = row * 8 + col;
-        rowPieces.add(boardFlat[index]);
-      }
-      boardGrid.add(rowPieces);
-    }
-    return boardGrid;
-  }
-
-  void _onSquareTapped(int row, int col) {
-    final square = _indexToSquare(row, col);
-    
-    if (selectedSquare == null) {
-      // Select a piece
-      final boardGrid = _getBoardGrid();
-      if (boardGrid[row][col] != null) {
-        setState(() {
-          selectedSquare = square;
-          // Get valid moves for this square
-          final moves = widget.game.moves({'square': square});
-          validMoves = List<String>.from(moves);
-        });
-      }
-    } else {
-      // Try to move to this square
-      final moveStr = '$selectedSquare$square';
-      try {
-        final moves = widget.game.moves({'verbose': true});
-        bool validMove = false;
-        String? executedMove;
-
-        for (var m in moves) {
-          if ((m['from'] == selectedSquare && m['to'] == square)) {
-            widget.game.move(m);
-            executedMove = moveStr;
-            validMove = true;
-            break;
-          }
-        }
-        
-        setState(() {
-          if (validMove) {
-            // Check if it's the best move
-            String status;
-            if (solutionIndex < widget.solutionMoves.length &&
-                executedMove == widget.solutionMoves[solutionIndex]) {
-              final moveDisplay = executedMove ?? moveStr;
-              status = '✓ Best move! ${moveDisplay.substring(0, 2).toUpperCase()}-${moveDisplay.substring(2).toUpperCase()}';
-              solutionIndex++;
-            } else if (solutionIndex < widget.solutionMoves.length) {
-              final expectedMove = widget.solutionMoves[solutionIndex];
-              status = '✗ Not the best move. Expected: ${expectedMove.substring(0, 2).toUpperCase()}-${expectedMove.substring(2).toUpperCase()}';
-            } else {
-              status = '✓ Move valid but puzzle already solved!';
-            }
-            widget.onMoveResult(status);
-            
-            selectedSquare = null;
-            validMoves = [];
-          } else {
-            // Invalid move, try selecting this square instead
-            selectedSquare = square;
-            final boardGrid = _getBoardGrid();
-            if (boardGrid[row][col] != null) {
-              final movesForSquare = widget.game.moves({'square': square});
-              validMoves = List<String>.from(movesForSquare);
-            } else {
-              selectedSquare = null;
-              validMoves = [];
-            }
-          }
-        });
-      } catch (e) {
-        setState(() {
-          selectedSquare = null;
-          validMoves = [];
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final boardGrid = _getBoardGrid();
-    
-    return Center(
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 8,
-          ),
-          itemCount: 64,
-          itemBuilder: (context, index) {
-            final row = index ~/ 8;
-            final col = index % 8;
-            final isLight = (row + col) % 2 == 0;
-            final square = _indexToSquare(row, col);
-            final isSelected = selectedSquare == square;
-            final isValidMove = validMoves.contains(square);
-            final piece = boardGrid[row][col];
-
-            return GestureDetector(
-              onTap: () => _onSquareTapped(row, col),
-              child: Container(
-                color: isSelected
-                    ? Colors.yellow
-                    : isValidMove
-                        ? Colors.green
-                        : isLight
-                            ? Colors.grey[300]
-                            : Colors.grey[600],
-                child: Center(
-                  child: Text(
-                    _getPieceSymbol(piece),
-                    style: const TextStyle(fontSize: 32),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  String _getPieceSymbol(chess.Piece? piece) {
-    if (piece == null) return '';
-    final symbols = {
-      'p': '♟', 'n': '♞', 'b': '♝', 'r': '♜', 'q': '♛', 'k': '♚',
-      'P': '♙', 'N': '♘', 'B': '♗', 'R': '♖', 'Q': '♕', 'K': '♔',
-    };
-    return symbols[piece.type] ?? '';
   }
 }
