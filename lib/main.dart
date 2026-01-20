@@ -274,13 +274,95 @@ class ChessPuzzlePage extends StatefulWidget {
 
 class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
   late ChessBoardController boardController;
-  int moveCount = 0;
+  int currentSolutionMoveIndex = 0;
   String? lastMoveStatus;
+  bool isPuzzleWon = false;
 
   @override
   void initState() {
     super.initState();
     boardController = ChessBoardController();
+    // Load the PGN to show the position from the puzzle
+    boardController.loadPGN(widget.puzzle.pgn);
+    // Add listener to board state changes
+    boardController.addListener(_onBoardChanged);
+  }
+
+  @override
+  void dispose() {
+    boardController.removeListener(_onBoardChanged);
+    boardController.dispose();
+    super.dispose();
+  }
+
+  void _onBoardChanged() {
+    if (isPuzzleWon) return;
+
+    // Get the current game state
+    final game = boardController.value;
+    final moves = game.moves({'verbose': true});
+    
+    if (moves.isEmpty && !game.in_checkmate) {
+      // No moves available but not checkmate - stalemate or draw
+      return;
+    }
+
+    // Check if we've completed all solution moves
+    if (currentSolutionMoveIndex >= widget.puzzle.solutionMoves.length) {
+      setState(() {
+        isPuzzleWon = true;
+        lastMoveStatus = '✓ Puzzle Solved! You won!';
+      });
+      return;
+    }
+
+    // Get the expected next move
+    final expectedMove = widget.puzzle.solutionMoves[currentSolutionMoveIndex];
+    
+    // Check if the last move matches the expected move
+    final halfMoves = game.moves().length;
+    final moveHistory = game.history;
+    
+    if (moveHistory.isNotEmpty) {
+      final lastMove = moveHistory.last;
+      final lastMoveStr = '${lastMove['from']}${lastMove['to']}';
+      
+      if (lastMoveStr == expectedMove) {
+        // Correct move!
+        setState(() {
+          lastMoveStatus = '✓ Correct move!';
+          currentSolutionMoveIndex++;
+        });
+        
+        // If there are more solution moves, make the opponent's move
+        if (currentSolutionMoveIndex < widget.puzzle.solutionMoves.length) {
+          Future.delayed(const Duration(milliseconds: 500), () {
+            final opponentMove = widget.puzzle.solutionMoves[currentSolutionMoveIndex];
+            boardController.makeMoveWithNormalNotation(
+              '${opponentMove.substring(0, 2)}${opponentMove.substring(2)}',
+            );
+            setState(() {
+              currentSolutionMoveIndex++;
+              lastMoveStatus = 'Opponent moved. Your turn.';
+            });
+            
+            // Check if puzzle is complete after opponent's move
+            if (currentSolutionMoveIndex >= widget.puzzle.solutionMoves.length) {
+              setState(() {
+                isPuzzleWon = true;
+                lastMoveStatus = '✓ Puzzle Solved! You won!';
+              });
+            }
+          });
+        }
+      } else {
+        // Incorrect move - undo it
+        setState(() {
+          lastMoveStatus = '✗ Wrong move! Expected: ${expectedMove.substring(0, 2).toUpperCase()}-${expectedMove.substring(2).toUpperCase()}';
+        });
+        boardController.undoMove();
+      }
+    }
   }
 
   @override
@@ -309,11 +391,11 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: lastMoveStatus!.contains('Best')
+                  color: isPuzzleWon || lastMoveStatus!.contains('Correct')
                       ? Colors.green[100]
-                      : lastMoveStatus!.contains('Valid')
-                          ? Colors.blue[100]
-                          : Colors.red[100],
+                      : lastMoveStatus!.contains('Wrong')
+                          ? Colors.red[100]
+                          : Colors.blue[100],
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -321,11 +403,11 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.bold,
-                    color: lastMoveStatus!.contains('Best')
+                    color: isPuzzleWon || lastMoveStatus!.contains('Correct')
                         ? Colors.green[900]
-                        : lastMoveStatus!.contains('Valid')
-                            ? Colors.blue[900]
-                            : Colors.red[900],
+                        : lastMoveStatus!.contains('Wrong')
+                            ? Colors.red[900]
+                            : Colors.blue[900],
                   ),
                   textAlign: TextAlign.center,
                 ),
@@ -336,9 +418,7 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
               child: ChessBoard(
                 controller: boardController,
                 boardColor: BoardColor.brown,
-                onMove: () {
-                  // Handle move validation here
-                },
+                onMove: _onBoardChanged,
               ),
             ),
             const SizedBox(height: 20),
@@ -348,9 +428,10 @@ class _ChessPuzzlePageState extends State<ChessPuzzlePage> {
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
-                      boardController.resetBoard();
+                      boardController.loadPGN(widget.puzzle.pgn);
+                      currentSolutionMoveIndex = 0;
                       lastMoveStatus = null;
-                      moveCount = 0;
+                      isPuzzleWon = false;
                     });
                   },
                   child: const Text('Reset'),
